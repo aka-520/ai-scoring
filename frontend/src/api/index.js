@@ -6,6 +6,12 @@ const baseURL = import.meta.env.VITE_API_BASE_URL
   : '/api'
   console.log('API Base URL:', baseURL)
 
+// 本機開發使用相對路徑（vite proxy），正式部署時從環境變數讀取 Railway URL
+const baseURL = import.meta.env.VITE_API_BASE_URL
+  ? `${import.meta.env.VITE_API_BASE_URL}/api`
+  : '/api'
+  console.log('API Base URL:', baseURL)
+
 const api = axios.create({
   baseURL,
   timeout: 30000,

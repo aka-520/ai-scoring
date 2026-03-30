@@ -31,3 +31,6 @@ npm-debug.log*
 # OS files
 .DS_Store
 Thumbs.db
+
+# Docker volumes（本機產生，不需推上去）
+pgdata/
