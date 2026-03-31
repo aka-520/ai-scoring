@@ -5,7 +5,6 @@
   "type": "commonjs",
   "main": "src/index.js",
   "scripts": {
-    "start": "npx prisma db push && node src/index.js",
     "dev": "node src/index.js",
     "seed": "node src/seed.js",
     "backup": "node ../scripts/backup.js"

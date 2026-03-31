@@ -24,7 +24,7 @@
           </template>
           <el-menu-item index="/admin/users">使用者管理</el-menu-item>
           <el-menu-item index="/admin/org">組織架構</el-menu-item>
-          <el-menu-item index="/admin/config">系統設定</el-menu-item>
+          <el-menu-item index="/admin/config">目標設定</el-menu-item>
         </el-sub-menu>
       </el-menu>
     </el-aside>

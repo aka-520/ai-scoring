@@ -104,12 +104,18 @@ export const executionLogsApi = {
   remove: (sceneId, id)     => api.delete(`/scenes/${sceneId}/execution-logs/${id}`),
 }
 
+export const actualSavingsApi = {
+  list:   (sceneId)         => api.get(`/scenes/${sceneId}/actual-savings`),
+  upsert: (sceneId, year, data) => api.put(`/scenes/${sceneId}/actual-savings/${year}`, data),
+}
+
 // ── Excel 匯入 ────────────────────────────────
 export const importApi = {
   uploadExcel: (formData) => api.post('/import/excel', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   }),
   downloadTemplate: () => api.get('/import/template', { responseType: 'blob' }),
+  exportExcel: () => api.get('/import/export', { responseType: 'blob' }),
 }
 
 // ── 系統設定 ──────────────────────────────────

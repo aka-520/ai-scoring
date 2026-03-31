@@ -1,15 +1,20 @@
 <template>
   <AppLayout>
     <div class="import-view">
-      <h2 class="page-title">📊 Excel 批次匯入</h2>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+        <h2 class="page-title" style="margin:0">📊 Excel 批次匯入</h2>
+        <el-button v-if="auth.isAdmin" type="success" :loading="exporting" @click="handleExport">
+          匯出 Excel
+        </el-button>
+      </div>
 
       <!-- 使用說明 -->
       <el-alert type="info" :closable="false" style="margin-bottom: 16px">
         <template #title>
-          請使用標準範本匯入，需包含以下 <strong>19 個必要欄位</strong>（標題名稱必須完全一致）
+          請使用標準範本匯入（必要欄位：<strong>場景名稱</strong>、<strong>所屬部門</strong>）。若提供<strong>項目編號</strong>且已存在，將覆蓋更新。
         </template>
         <div class="col-list">
-          {{ requiredCols.join('、') }}
+          {{ allCols.join('、') }}
         </div>
       </el-alert>
 
@@ -71,21 +76,27 @@
 
         <!-- 統計摘要 -->
         <el-row :gutter="16" class="summary-row">
-          <el-col :xs="24" :sm="8">
+          <el-col :xs="24" :sm="6">
             <div class="stat-item">
               <div class="stat-label">總筆數</div>
               <div class="stat-value">{{ result.totalRows }}</div>
             </div>
           </el-col>
-          <el-col :xs="24" :sm="8">
+          <el-col :xs="24" :sm="6">
             <div class="stat-item success">
-              <div class="stat-label">✓ 成功</div>
+              <div class="stat-label">✓ 新增</div>
               <div class="stat-value">{{ result.successRows }}</div>
             </div>
           </el-col>
-          <el-col :xs="24" :sm="8">
+          <el-col :xs="24" :sm="6">
+            <div class="stat-item" style="background:#fdf6ec;border-color:#e6a23c">
+              <div class="stat-label" style="color:#e6a23c">↻ 覆蓋更新</div>
+              <div class="stat-value" style="color:#e6a23c">{{ result.updatedRows ?? 0 }}</div>
+            </div>
+          </el-col>
+          <el-col :xs="24" :sm="6">
             <div class="stat-item error">
-              <div class="stat-label">✗ 失敗/跳過</div>
+              <div class="stat-label">✗ 失敗</div>
               <div class="stat-value">{{ result.failedRows }}</div>
             </div>
           </el-col>
@@ -131,19 +142,25 @@
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { importApi } from '../api/index.js'
+import { useAuthStore } from '../stores/auth.js'
 import AppLayout from '../components/AppLayout.vue'
 import { Upload, Download } from '@element-plus/icons-vue'
 
+const auth = useAuthStore()
 const uploadRef = ref()
 const selectedFile = ref(null)
 const uploading = ref(false)
+const exporting = ref(false)
 const result = ref(null)
 
-const requiredCols = [
-  '部門', '課級', '場景名稱', '維持型或開發型', '是否由資訊協助完成',
-  'Agent類型', '開發工具/方法描述', '輸入描述', '輸出描述', '工作步驟',
-  '每次花費時間(小時)', '月執行頻率', '需求人次', '執行人員', '種子人員',
-  '直屬主管', '預估省時(小時/月)', '優先度', '備註',
+const allCols = [
+  '項目編號', '所屬本部', '所屬部門', '所屬課別', '場景名稱',
+  '維持/開發/作廢', '是否由資訊協助完成', '開發方式', 'AI Agent用途分類', '開發工具說明',
+  '常見問項/希望AI處理什麼', '預期輸出成果', '任務步驟或處理邏輯', '原始資料範例說明', '最終資料範例說明',
+  '每次執行耗費時間', '執行頻率', '有需求的人數', '任務負責人', '種子負責人',
+  '直屬主管', '優先序', '狀態', '進度(%)', '成立日', '預計完成日', '上線日期',
+  '原總作業時數', '改善後預估總作業時數', '原總作業人數', '改善後總作業人數',
+  '文字成效說明', '上線實際成效說明', '其他量化成效說明', '備註',
 ]
 
 function handleFileChange(file) {
@@ -179,6 +196,25 @@ async function downloadTemplate() {
   }
 }
 
+async function handleExport() {
+  exporting.value = true
+  try {
+    const res = await importApi.exportExcel()
+    const url = URL.createObjectURL(res.data)
+    const a = document.createElement('a')
+    a.href = url
+    const today = new Date().toISOString().substring(0, 10)
+    a.download = `scenes_export_${today}.xlsx`
+    a.click()
+    URL.revokeObjectURL(url)
+    ElMessage.success('匯出成功')
+  } catch {
+    ElMessage.error('匯出失敗')
+  } finally {
+    exporting.value = false
+  }
+}
+
 async function handleUpload() {
   if (!selectedFile.value) {
     ElMessage.warning('請先選擇要匯入的檔案')
@@ -194,16 +230,13 @@ async function handleUpload() {
     const res = await importApi.uploadExcel(fd)
     result.value = res.data
 
-    if (res.data.successRows > 0) {
-      ElMessage.success(`✓ 成功匯入 ${res.data.successRows} 筆場景`)
-      // 匯入成功後延遲 1.5 秒再清空（讓用戶看到成功提示）
-      setTimeout(() => {
-        handleReset()
-      }, 1500)
+    if (res.data.successRows > 0 || res.data.updatedRows > 0) {
+      ElMessage.success(`✓ 新增 ${res.data.successRows} 筆，覆蓋更新 ${res.data.updatedRows ?? 0} 筆`)
+      setTimeout(() => { handleReset() }, 1500)
     }
 
     if (res.data.failedRows > 0) {
-      ElMessage.warning(`⚠️ 有 ${res.data.failedRows} 筆未成功，請查看錯誤詳情`)
+      ElMessage.warning(`⚠️ 有 ${res.data.failedRows} 筆失敗，請查看錯誤詳情`)
     }
   } catch (e) {
     const data = e.response?.data

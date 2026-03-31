@@ -194,8 +194,8 @@ const allDepts = ref([])
 const allSections = ref([])
 
 const filteredDepts = computed(() => {
-  // chief 只能看自己本部的部門
-  if (auth.isChief && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
+  // manager / chief 只能看自己本部的部門
+  if ((auth.isManager || auth.isChief) && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
     return allDepts.value.filter(d => d.divisionId === auth.user.divisionId)
   }
   // admin / boss / executive 按 filterDivision 篩選
@@ -205,13 +205,13 @@ const filteredDepts = computed(() => {
 })
 
 const filteredSections = computed(() => {
-  // chief 只能看自己本部部門的課別
-  if (auth.isChief && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
-    const chiefDepts = allDepts.value.filter(d => d.divisionId === auth.user.divisionId)
+  // manager / chief 只能看自己本部部門的課別
+  if ((auth.isManager || auth.isChief) && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
+    const myDepts = allDepts.value.filter(d => d.divisionId === auth.user.divisionId)
     if (filterDept.value) {
       return allSections.value.filter(s => s.departmentId === filterDept.value)
     }
-    return allSections.value.filter(s => chiefDepts.some(d => d.id === s.departmentId))
+    return allSections.value.filter(s => myDepts.some(d => d.id === s.departmentId))
   }
   // admin 則按原邏輯
   return filterDept.value
@@ -246,8 +246,8 @@ onMounted(async () => {
   allDepts.value = deptRes.data
   allSections.value = secRes.data
 
-  // chief 只能看自己本部的場景（admin / boss / executive 不限制）
-  if (auth.isChief && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
+  // chief / manager 只能看自己本部的場景（admin / boss / executive 不限制）
+  if ((auth.isChief || auth.isManager) && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId) {
     filterDivision.value = auth.user.divisionId
   }
 
@@ -281,8 +281,8 @@ async function loadScenes() {
 function onDivisionChange() {
   filterDept.value = null
   filterSection.value = null
-  // chief 防護：不允許改變本部（admin / boss / executive 不受限制）
-  if (auth.isChief && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId && filterDivision.value !== auth.user.divisionId) {
+  // chief / manager 防護：不允許改變本部（admin / boss / executive 不受限制）
+  if ((auth.isChief || auth.isManager) && !auth.isAdmin && !auth.isBoss && !auth.isExecutive && auth.user?.divisionId && filterDivision.value !== auth.user.divisionId) {
     filterDivision.value = auth.user.divisionId
     return
   }

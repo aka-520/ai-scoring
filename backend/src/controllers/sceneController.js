@@ -37,8 +37,10 @@ async function canAccessScene(sceneId, user) {
   }
 
   if (roles.includes('manager')) {
-    const name = user.name;
-    return (scene.taskOwners || '').includes(name) || (scene.seedOwners || '').includes(name);
+    if (user.divisionId) {
+      return scene.department?.divisionId === user.divisionId;
+    }
+    return false;
   }
 
   return false;
@@ -57,7 +59,16 @@ exports.getAll = async (req, res) => {
     const isChief = roles.includes('chief');
 
     if (isManager && !isChief) {
-      nameFilter = userName;
+      // manager 依本部（divisionId）過濾，與 chief 相同邏輯
+      if (req.user.divisionId) {
+        const depts = await prisma.department.findMany({
+          where: { divisionId: req.user.divisionId },
+          select: { id: true },
+        });
+        allowedDeptIds = depts.map(d => d.id);
+      } else {
+        return res.json([]);
+      }
     } else if (isChief) {
       let deptSet = new Set();
       if (req.user.divisionId) {
@@ -164,9 +175,11 @@ exports.getOne = async (req, res) => {
         }
         if (!allowed) return res.status(403).json({ error: '無權存取此場景' });
       } else if (roles.includes('manager')) {
-        const name = req.user.name;
-        const inOwners = (scene.taskOwners || '').includes(name) || (scene.seedOwners || '').includes(name);
-        if (!inOwners) return res.status(403).json({ error: '無權存取此場景' });
+        let allowed = false;
+        if (req.user.divisionId) {
+          allowed = scene.department?.divisionId === req.user.divisionId;
+        }
+        if (!allowed) return res.status(403).json({ error: '無權存取此場景' });
       } else {
         return res.status(403).json({ error: '無權存取此場景' });
       }
@@ -216,8 +229,12 @@ exports.create = async (req, res) => {
       establishDate: body.establishDate ? new Date(body.establishDate) : null,
       targetDate: body.targetDate ? new Date(body.targetDate) : null,
       goLiveDate: body.goLiveDate ? new Date(body.goLiveDate) : null,
+      originalHours: body.originalHours != null ? parseFloat(body.originalHours) : null,
+      improvedHours: body.improvedHours != null ? parseFloat(body.improvedHours) : null,
       timeSavedHours: body.timeSavedHours ? parseFloat(body.timeSavedHours) : null,
       actualTimeSavedHours: body.actualTimeSavedHours ? parseFloat(body.actualTimeSavedHours) : null,
+      originalHeadcount: body.originalHeadcount != null ? parseInt(body.originalHeadcount) : null,
+      improvedHeadcount: body.improvedHeadcount != null ? parseInt(body.improvedHeadcount) : null,
       actualDemandCount: body.actualDemandCount ? parseInt(body.actualDemandCount) : null,
       resultText: body.resultText || null,
       actualResultText: body.actualResultText || null,
@@ -236,6 +253,11 @@ exports.update = async (req, res) => {
     return res.status(403).json({ error: '僅限管理員、推動管理者、業務主管、主管或公司管理層編輯場景' });
   }
   const id = parseInt(req.params.id);
+  // manager 只能編輯本部場景
+  if (roles.includes('manager') && !roles.includes('admin') && !roles.includes('boss') && !roles.includes('executive')) {
+    const accessible = await canAccessScene(id, req.user);
+    if (!accessible) return res.status(403).json({ error: '無權編輯此場景' });
+  }
   const body = req.body;
   const data = {};
 
@@ -244,7 +266,7 @@ exports.update = async (req, res) => {
     if (body[f] !== undefined) data[f] = body[f];
   }
 
-  const intFields = ['departmentId', 'sectionId', 'demandCount', 'progress', 'actualDemandCount'];
+  const intFields = ['departmentId', 'sectionId', 'demandCount', 'progress', 'actualDemandCount', 'originalHeadcount', 'improvedHeadcount'];
   for (const f of intFields) {
     if (body[f] !== undefined) data[f] = body[f] !== null ? parseInt(body[f]) : null;
   }
@@ -254,7 +276,7 @@ exports.update = async (req, res) => {
     if (body[f] !== undefined) data[f] = body[f] !== null ? String(body[f]) : null;
   }
 
-  const floatFields = ['timeSavedHours', 'actualTimeSavedHours'];
+  const floatFields = ['timeSavedHours', 'actualTimeSavedHours', 'originalHours', 'improvedHours'];
   for (const f of floatFields) {
     if (body[f] !== undefined) data[f] = body[f] !== null ? parseFloat(body[f]) : null;
   }

@@ -21,7 +21,7 @@ export const ROLE_OPTIONS = [
 // 角色標籤（顯示用）
 export const ROLE_MAP = {
   [ROLES.ADMIN]: '系統管理員',
-  [ROLES.MANAGER]: '場景管理',
+  [ROLES.MANAGER]: '種子負責人',
   [ROLES.CHIEF]: '主管',
   [ROLES.EXECUTIVE]: '公司管理層',
 }

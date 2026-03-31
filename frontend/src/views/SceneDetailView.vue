@@ -74,7 +74,7 @@
                 <div class="form-field">
                   <label class="field-label">所屬本部</label>
                   <div v-if="!editing" class="field-value">{{ scene.department?.division?.name || '-' }}</div>
-                  <el-select v-else v-model="form.divisionId" clearable placeholder="選擇本部" style="width:100%" :disabled="auth.isChief && !auth.isAdmin && !auth.isBoss && !auth.isExecutive" @change="onDivisionChange">
+                  <el-select v-else v-model="form.divisionId" clearable placeholder="選擇本部" style="width:100%" :disabled="(auth.isChief || auth.isManager) && !auth.isAdmin && !auth.isBoss && !auth.isExecutive" @change="onDivisionChange">
                     <el-option v-for="d in divisions" :key="d.id" :label="d.name" :value="d.id" />
                   </el-select>
                 </div>
@@ -367,37 +367,86 @@
                 <span style="font-weight:600;font-size:14px">📈 成效指標</span>
               </div>
             </template>
+            <!-- 時數三欄 -->
             <el-row :gutter="24" style="margin-bottom:16px">
-              <el-col :xs="24" :sm="12">
+              <el-col :xs="24" :sm="8">
                 <div class="form-field">
-                  <label class="field-label">預估節省時數（每月，h）</label>
-                  <div v-if="!editing" class="field-value">{{ scene.timeSavedHours ?? '-' }}</div>
-                  <el-input-number v-else v-model="form.timeSavedHours" :min="0" :max="9999.9" :precision="1" style="width:100%" />
+                  <label class="field-label">原總作業時數</label>
+                  <div v-if="!editing" class="field-value">{{ scene.originalHours ?? '-' }}</div>
+                  <el-input-number v-else v-model="form.originalHours" :min="0" :max="9999.9" :precision="1" style="width:100%" />
                 </div>
               </el-col>
-              <el-col :xs="24" :sm="12">
+              <el-col :xs="24" :sm="8">
                 <div class="form-field">
-                  <label class="field-label">實際節省時數（每月，h）</label>
-                  <div v-if="!editing" class="field-value">{{ scene.actualTimeSavedHours ?? '-' }}</div>
-                  <el-input-number v-else v-model="form.actualTimeSavedHours" :min="0" :max="9999.9" :precision="1" style="width:100%" />
+                  <label class="field-label">改善後預估總作業時數</label>
+                  <div v-if="!editing" class="field-value">{{ scene.improvedHours ?? '-' }}</div>
+                  <el-input-number v-else v-model="form.improvedHours" :min="0" :max="9999.9" :precision="1" style="width:100%" />
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="8">
+                <div class="form-field">
+                  <label class="field-label">預估節省時數</label>
+                  <div class="field-value" style="color:#409eff;font-weight:500">{{ estimatedSavedHours ?? '-' }}</div>
                 </div>
               </el-col>
             </el-row>
+            <!-- 人數三欄 -->
             <el-row :gutter="24" style="margin-bottom:16px">
-              <el-col :xs="24" :sm="12">
+              <el-col :xs="24" :sm="8">
                 <div class="form-field">
-                  <label class="field-label">效率提升 %</label>
-                  <div class="field-value" style="font-size:16px;font-weight:500;color:#409eff">{{ scene.efficiencyGainPct != null ? scene.efficiencyGainPct + ' %' : '—' }}</div>
+                  <label class="field-label">原總作業人數</label>
+                  <div v-if="!editing" class="field-value">{{ scene.originalHeadcount ?? '-' }}</div>
+                  <el-input-number v-else v-model="form.originalHeadcount" :min="0" :precision="0" style="width:100%" />
                 </div>
               </el-col>
-              <el-col :xs="24" :sm="12">
+              <el-col :xs="24" :sm="8">
                 <div class="form-field">
-                  <label class="field-label">實際需求人數</label>
-                  <div v-if="!editing" class="field-value">{{ scene.actualDemandCount ?? '-' }}</div>
-                  <el-input-number v-else v-model="form.actualDemandCount" :min="0" :precision="0" style="width:100%" />
+                  <label class="field-label">改善後總作業人數</label>
+                  <div v-if="!editing" class="field-value">{{ scene.improvedHeadcount ?? '-' }}</div>
+                  <el-input-number v-else v-model="form.improvedHeadcount" :min="0" :precision="0" style="width:100%" />
+                </div>
+              </el-col>
+              <el-col :xs="24" :sm="8">
+                <div class="form-field">
+                  <label class="field-label">節省人數</label>
+                  <div class="field-value" style="color:#409eff;font-weight:500">{{ estimatedSavedHeadcount ?? '-' }}</div>
                 </div>
               </el-col>
             </el-row>
+            <!-- 實際節省時數月份表 -->
+            <el-divider style="margin:12px 0" />
+            <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;flex-wrap:wrap">
+              <span style="font-weight:600;font-size:13px">實際節省時數</span>
+              <el-button circle size="small" @click="baseYear--">－</el-button>
+              <span style="font-size:13px;font-weight:600;min-width:80px;text-align:center">
+                {{ baseYear }}{{ rowCount > 1 ? ' ～ ' + (baseYear + rowCount - 1) : '' }}
+              </span>
+              <el-button circle size="small" @click="baseYear++">＋</el-button>
+              <el-radio-group v-model="rowCount" size="small">
+                <el-radio-button :value="1">1列</el-radio-button>
+                <el-radio-button :value="2">2列</el-radio-button>
+                <el-radio-button :value="3">3列</el-radio-button>
+              </el-radio-group>
+            </div>
+            <!-- 表頭 -->
+            <div style="display:grid;grid-template-columns:52px repeat(12,1fr);gap:3px;margin-bottom:3px">
+              <div></div>
+              <div v-for="m in MONTHS" :key="m.key" style="font-size:11px;color:#888;text-align:center">{{ m.label }}</div>
+            </div>
+            <!-- 年份列 -->
+            <div v-for="year in visibleYears" :key="year" style="display:grid;grid-template-columns:52px repeat(12,1fr);gap:3px;margin-bottom:3px;align-items:center">
+              <div style="font-size:13px;font-weight:600;text-align:center;color:#555">{{ year }}</div>
+              <el-input-number
+                v-for="m in MONTHS" :key="m.key"
+                v-model="ensureYearRow(year)[m.key]"
+                :min="0" :max="9999.9" :precision="1" :controls="false" size="small"
+                style="width:100%"
+                placeholder="-"
+                @blur="autoSave(year)"
+                @keydown.enter.native="autoSave(year)"
+              />
+            </div>
+            <el-divider style="margin:12px 0" />
             <el-row :gutter="24">
               <el-col :xs="24">
                 <div class="form-field">
@@ -516,7 +565,14 @@
 import { ref, reactive, computed, onMounted, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { scenesApi, sectionsApi, deptPersonsApi, divisionsApi, departmentsApi, executionLogsApi } from '../api/index.js'
+import { scenesApi, sectionsApi, deptPersonsApi, divisionsApi, departmentsApi, executionLogsApi, actualSavingsApi } from '../api/index.js'
+
+const MONTHS = [
+  { key: 'jan', label: '一月' }, { key: 'feb', label: '二月' }, { key: 'mar', label: '三月' },
+  { key: 'apr', label: '四月' }, { key: 'may', label: '五月' }, { key: 'jun', label: '六月' },
+  { key: 'jul', label: '七月' }, { key: 'aug', label: '八月' }, { key: 'sep', label: '九月' },
+  { key: 'oct', label: '十月' }, { key: 'nov', label: '十一月' }, { key: 'dec', label: '十二月' },
+]
 import { useAuthStore } from '../stores/auth.js'
 import AppLayout from '../components/AppLayout.vue'
 
@@ -559,8 +615,12 @@ const form = reactive({
   establishDate: null,
   targetDate: null,
   goLiveDate: null,
+  originalHours: null,
+  improvedHours: null,
   timeSavedHours: null,
   actualTimeSavedHours: null,
+  originalHeadcount: null,
+  improvedHeadcount: null,
   actualDemandCount: null,
   resultText: '',
   actualResultText: '',
@@ -568,10 +628,42 @@ const form = reactive({
   note: '',
 })
 const divisions = ref([])
+const baseYear = ref(new Date().getFullYear())
+const rowCount = ref(2)
+const actualSavingsList = ref([])
+const savingsMap = reactive({})
+const MONTH_KEYS = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec']
+
+const visibleYears = computed(() =>
+  Array.from({ length: rowCount.value }, (_, i) => baseYear.value + i)
+)
+
+function ensureYearRow(year) {
+  if (!savingsMap[year]) {
+    savingsMap[year] = reactive(Object.fromEntries(MONTH_KEYS.map(k => [k, null])))
+    const row = actualSavingsList.value.find(r => r.year === year)
+    if (row) for (const k of MONTH_KEYS) savingsMap[year][k] = row[k] ?? null
+  }
+  return savingsMap[year]
+}
+
+watch(visibleYears, (years) => { years.forEach(ensureYearRow) }, { immediate: true })
 const allDepartments = ref([])
 const filteredDepts = computed(() =>
   form.divisionId ? allDepartments.value.filter(d => d.divisionId === form.divisionId) : []
 )
+const estimatedSavedHours = computed(() => {
+  const orig = editing.value ? form.originalHours : scene.value?.originalHours
+  const imp  = editing.value ? form.improvedHours : scene.value?.improvedHours
+  if (orig == null || imp == null) return null
+  return Math.round((orig - imp) * 10) / 10
+})
+const estimatedSavedHeadcount = computed(() => {
+  const orig = editing.value ? form.originalHeadcount : scene.value?.originalHeadcount
+  const imp  = editing.value ? form.improvedHeadcount : scene.value?.improvedHeadcount
+  if (orig == null || imp == null) return null
+  return orig - imp
+})
 
 onMounted(async () => {
   loading.value = true
@@ -588,6 +680,7 @@ onMounted(async () => {
     await Promise.all([
       loadSections(sceneRes.data.departmentId),
       loadDeptPersons(sceneRes.data.departmentId),
+      loadActualSavings(),
     ])
     // 場景和部門資料加載成功後，再加載執行日誌
     try {
@@ -619,6 +712,31 @@ async function loadDeptPersons(deptId) {
     const r = await deptPersonsApi.list({ departmentId: deptId })
     deptPersons.value = r.data
   } catch {}
+}
+
+async function loadActualSavings() {
+  try {
+    const r = await actualSavingsApi.list(route.params.id)
+    actualSavingsList.value = r.data
+    for (const row of r.data) {
+      if (!savingsMap[row.year]) savingsMap[row.year] = reactive(Object.fromEntries(MONTH_KEYS.map(k => [k, null])))
+      for (const k of MONTH_KEYS) savingsMap[row.year][k] = row[k] ?? null
+    }
+    visibleYears.value.forEach(ensureYearRow)
+  } catch {}
+}
+
+async function autoSave(year) {
+  const data = savingsMap[year]
+  if (!data) return
+  try {
+    const r = await actualSavingsApi.upsert(route.params.id, year, data)
+    const idx = actualSavingsList.value.findIndex(x => x.year === year)
+    if (idx >= 0) actualSavingsList.value[idx] = r.data
+    else actualSavingsList.value.push(r.data)
+  } catch (e) {
+    ElMessage.error('儲存失敗：' + (e.response?.data?.error || e.message))
+  }
 }
 
 function fillForm(d) {
@@ -655,8 +773,12 @@ function fillForm(d) {
     establishDate: d.establishDate ? d.establishDate.substring(0, 10) : null,
     targetDate: d.targetDate ? d.targetDate.substring(0, 10) : null,
     goLiveDate: d.goLiveDate ? d.goLiveDate.substring(0, 19) : null,
+    originalHours: d.originalHours ?? null,
+    improvedHours: d.improvedHours ?? null,
     timeSavedHours: d.timeSavedHours ?? null,
     actualTimeSavedHours: d.actualTimeSavedHours ?? null,
+    originalHeadcount: d.originalHeadcount ?? null,
+    improvedHeadcount: d.improvedHeadcount ?? null,
     actualDemandCount: d.actualDemandCount ?? null,
     resultText: d.resultText ?? null,
     actualResultText: d.actualResultText ?? null,

@@ -145,9 +145,13 @@ model Scene {
   completedDate       DateTime?
   goLiveDate          DateTime?
 
-  timeSavedHours      Float?     // 預估省時（小時/月）
+  originalHours        Float?     // 原總作業時數
+  improvedHours        Float?     // 改善後總作業時數
+  timeSavedHours      Float?     // 預估省時（小時/月，舊欄）
   actualTimeSavedHours Float?    // 實際省時
-  actualDemandCount   Int?       // 實際需求人次
+  originalHeadcount    Int?       // 原總作業人數
+  improvedHeadcount    Int?       // 改善後總作業人數
+  actualDemandCount   Int?       // 實際需求人次（舊欄）
   // efficiencyGainPct 為計算欄，由 API 動態回傳
 
   resultText          String?
@@ -164,6 +168,30 @@ model Scene {
 
   benefits            SceneBenefit[]
   executionLogs       SceneExecutionLog[]
+  actualSavings       SceneActualSavings[]
+}
+
+model SceneActualSavings {
+  id      Int    @id @default(autoincrement())
+  sceneId Int
+  scene   Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  year    Int
+  jan     Float?
+  feb     Float?
+  mar     Float?
+  apr     Float?
+  may     Float?
+  jun     Float?
+  jul     Float?
+  aug     Float?
+  sep     Float?
+  oct     Float?
+  nov     Float?
+  dec     Float?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([sceneId, year])
 }
 
 // ─────────────────────────────────────────────

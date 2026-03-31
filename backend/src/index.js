@@ -19,6 +19,7 @@ const configRoutes             = require('./routes/config');
 const dashboardRoutes          = require('./routes/dashboard');
 // 评分相关路由已删除
 const efficiencyReportsRoutes  = require('./routes/efficiency-reports');
+const actualSavingsRoutes       = require('./routes/actual-savings');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -35,7 +36,10 @@ const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5174')
   .map(o => o.trim());
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    // 允許所有 Vercel preview deployment（*.vercel.app）
+    if (/^https:\/\/[^.]+\.vercel\.app$/.test(origin)) return callback(null, true);
     callback(new Error(`CORS: origin ${origin} not allowed`));
   },
   credentials: true,
@@ -65,6 +69,7 @@ app.use('/api/users',                   usersRoutes);
 app.use('/api/org-chiefs',              orgChiefsRoutes);
 app.use('/api/scenes',                  scenesRoutes);
 app.use('/api/scenes/:sceneId/execution-logs', executionLogsRoutes);
+app.use('/api/scenes/:sceneId/actual-savings', actualSavingsRoutes);
 app.use('/api/import',                  importRoutes);
 app.use('/api/config',                  configRoutes);
 app.use('/api/dashboard',               dashboardRoutes);

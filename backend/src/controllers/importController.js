@@ -1,6 +1,5 @@
 const path = require('path');
 const fs = require('fs');
-const crypto = require('crypto');
 const multer = require('multer');
 const XLSX = require('xlsx');
 const prisma = require('../prisma');
@@ -18,28 +17,46 @@ const upload = multer({
   },
 });
 
+// 欄位標題 → 欄位名稱
 const COL_MAP = {
-  '部門': 'department',
-  '課級': 'section',
-  '場景名稱': 'sceneName',
-  '維持型或開發型': 'maintainOrDevelop',
-  '是否由資訊協助完成': 'itAssisted',
-  'Agent類型': 'agentCategory',
-  '開發工具/方法描述': 'developToolDesc',
-  '輸入描述': 'inputDesc',
-  '輸出描述': 'outputDesc',
-  '工作步驟': 'taskSteps',
-  '每次花費時間(小時)': 'timePerExecution',
-  '月執行頻率': 'monthlyFrequency',
-  '需求人次': 'demandCount',
-  '執行人員': 'taskOwners',
-  '種子人員': 'seedOwners',
-  '直屬主管': 'directSupervisor',
-  '預估省時(小時/月)': 'timeSavedHours',
-  '優先度': 'priority',
-  '備註': 'note',
+  '項目編號':               'itemNo',
+  '所屬本部':               'division',
+  '所屬部門':               'department',
+  '所屬課別':               'section',
+  '場景名稱':               'sceneName',
+  '維持/開發/作廢':         'maintainOrDevelop',
+  '是否由資訊協助完成':     'itAssisted',
+  '開發方式':               'developMethod',
+  'AI Agent用途分類':       'agentCategory',
+  '開發工具說明':           'developToolDesc',
+  '常見問項/希望AI處理什麼': 'inputDesc',
+  '預期輸出成果':           'outputDesc',
+  '任務步驟或處理邏輯':     'taskSteps',
+  '原始資料範例說明':       'rawDataExample',
+  '最終資料範例說明':       'finalDataExample',
+  '每次執行耗費時間':       'timePerExecution',
+  '執行頻率':               'monthlyFrequency',
+  '有需求的人數':           'demandCount',
+  '任務負責人':             'taskOwners',
+  '種子負責人':             'seedOwners',
+  '直屬主管':               'directSupervisor',
+  '優先序':                 'priority',
+  '狀態':                   'status',
+  '進度(%)':                'progress',
+  '成立日':                 'establishDate',
+  '預計完成日':             'targetDate',
+  '上線日期':               'goLiveDate',
+  '原總作業時數':           'originalHours',
+  '改善後預估總作業時數':   'improvedHours',
+  '原總作業人數':           'originalHeadcount',
+  '改善後總作業人數':       'improvedHeadcount',
+  '文字成效說明':           'resultText',
+  '上線實際成效說明':       'actualResultText',
+  '其他量化成效說明':       'otherMetrics',
+  '備註':                   'note',
 };
-const REQUIRED_COLS = Object.keys(COL_MAP);
+const ALL_COLS = Object.keys(COL_MAP);
+const REQUIRED_COLS = ['場景名稱', '所屬部門'];
 
 function parseItAssisted(val) {
   if (val === null || val === undefined || val === '') return null;
@@ -47,6 +64,19 @@ function parseItAssisted(val) {
   if (['是', 'y', '1', 'true'].includes(s)) return true;
   if (['否', 'n', '0', 'false'].includes(s)) return false;
   return null;
+}
+
+function parseDate(val) {
+  if (!val) return null;
+  // Excel 序列號
+  if (typeof val === 'number') {
+    const d = XLSX.SSF.parse_date_code(val);
+    if (d) return new Date(d.y, d.m - 1, d.d);
+  }
+  const s = String(val).trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return isNaN(d.getTime()) ? null : d;
 }
 
 exports.uploadMiddleware = upload.single('file');
@@ -79,6 +109,7 @@ exports.importExcel = async (req, res) => {
     const dataRows = rows.slice(1).filter(row => row.some(cell => cell !== ''));
     const errors = [];
     let successCount = 0;
+    let updatedCount = 0;
     let failedCount = 0;
 
     for (let i = 0; i < dataRows.length; i++) {
@@ -87,6 +118,10 @@ exports.importExcel = async (req, res) => {
       const get = (field) => {
         const idx = colIndex[field];
         return idx !== undefined ? String(row[idx] ?? '').trim() : '';
+      };
+      const getRaw = (field) => {
+        const idx = colIndex[field];
+        return idx !== undefined ? row[idx] : '';
       };
 
       try {
@@ -99,7 +134,7 @@ exports.importExcel = async (req, res) => {
 
         const deptName = get('department');
         if (!deptName) {
-          errors.push({ row: rowNum, error: '部門名稱為空' });
+          errors.push({ row: rowNum, error: '所屬部門為空' });
           failedCount++;
           continue;
         }
@@ -118,46 +153,63 @@ exports.importExcel = async (req, res) => {
           if (sec) sectionId = sec.id;
         }
 
-        const hashSource = `${deptName}|${sectionName}|${sceneName}`;
-        const importHash = crypto.createHash('md5').update(hashSource).digest('hex');
+        const sceneData = {
+          departmentId: dept.id,
+          sectionId,
+          sceneName,
+          maintainOrDevelop: get('maintainOrDevelop') || null,
+          itAssisted: parseItAssisted(get('itAssisted')),
+          developMethod: get('developMethod') || null,
+          agentCategory: get('agentCategory') || null,
+          developToolDesc: get('developToolDesc') || null,
+          inputDesc: get('inputDesc') || null,
+          outputDesc: get('outputDesc') || null,
+          taskSteps: get('taskSteps') || null,
+          rawDataExample: get('rawDataExample') || null,
+          finalDataExample: get('finalDataExample') || null,
+          timePerExecution: get('timePerExecution') || null,
+          monthlyFrequency: get('monthlyFrequency') || null,
+          demandCount: get('demandCount') ? parseInt(get('demandCount')) : null,
+          taskOwners: get('taskOwners') || null,
+          seedOwners: get('seedOwners') || null,
+          directSupervisor: get('directSupervisor') || null,
+          priority: get('priority') || '中',
+          status: get('status') || '規劃中',
+          progress: get('progress') ? Math.min(100, Math.max(0, parseInt(get('progress')))) : 0,
+          establishDate: parseDate(getRaw('establishDate')),
+          targetDate: parseDate(getRaw('targetDate')),
+          goLiveDate: parseDate(getRaw('goLiveDate')),
+          originalHours: get('originalHours') ? parseFloat(get('originalHours')) : null,
+          improvedHours: get('improvedHours') ? parseFloat(get('improvedHours')) : null,
+          originalHeadcount: get('originalHeadcount') ? parseInt(get('originalHeadcount')) : null,
+          improvedHeadcount: get('improvedHeadcount') ? parseInt(get('improvedHeadcount')) : null,
+          resultText: get('resultText') || null,
+          actualResultText: get('actualResultText') || null,
+          otherMetrics: get('otherMetrics') || null,
+          note: get('note') || null,
+        };
 
-        const existing = await prisma.scene.findUnique({ where: { importHash } });
-        if (existing) {
-          errors.push({ row: rowNum, error: `場景已存在（itemNo: ${existing.itemNo}），跳過`, level: 'warn' });
-          failedCount++;
-          continue;
+        const providedItemNo = get('itemNo');
+
+        if (providedItemNo) {
+          // 有項目編號 → upsert
+          const existing = await prisma.scene.findUnique({ where: { itemNo: providedItemNo } });
+          if (existing) {
+            await prisma.scene.update({ where: { itemNo: providedItemNo }, data: sceneData });
+            errors.push({ row: rowNum, error: `已覆蓋更新（${providedItemNo}）`, level: 'warn' });
+            updatedCount++;
+          } else {
+            await prisma.scene.create({ data: { itemNo: providedItemNo, ...sceneData } });
+            successCount++;
+          }
+        } else {
+          // 無項目編號 → 新增，自動產生
+          const last = await prisma.scene.findFirst({ orderBy: { id: 'desc' } });
+          const nextNum = last ? (parseInt(last.itemNo.replace('AI-', '')) + 1) : 1;
+          const itemNo = `AI-${String(nextNum).padStart(4, '0')}`;
+          await prisma.scene.create({ data: { itemNo, ...sceneData } });
+          successCount++;
         }
-
-        const last = await prisma.scene.findFirst({ orderBy: { id: 'desc' } });
-        const nextNum = last ? (parseInt(last.itemNo.replace('AI-', '')) + 1) : 1;
-        const itemNo = `AI-${String(nextNum).padStart(4, '0')}`;
-
-        await prisma.scene.create({
-          data: {
-            itemNo,
-            departmentId: dept.id,
-            sectionId,
-            sceneName,
-            maintainOrDevelop: get('maintainOrDevelop') || null,
-            itAssisted: parseItAssisted(get('itAssisted')),
-            agentCategory: get('agentCategory') || null,
-            developToolDesc: get('developToolDesc') || null,
-            inputDesc: get('inputDesc') || null,
-            outputDesc: get('outputDesc') || null,
-            taskSteps: get('taskSteps') || null,
-            timePerExecution: get('timePerExecution') ? parseFloat(get('timePerExecution')) : null,
-            monthlyFrequency: get('monthlyFrequency') ? parseFloat(get('monthlyFrequency')) : null,
-            demandCount: get('demandCount') ? parseInt(get('demandCount')) : null,
-            taskOwners: get('taskOwners') || null,
-            seedOwners: get('seedOwners') || null,
-            directSupervisor: get('directSupervisor') || null,
-            timeSavedHours: get('timeSavedHours') ? parseFloat(get('timeSavedHours')) : null,
-            priority: get('priority') || '中',
-            note: get('note') || null,
-            importHash,
-          },
-        });
-        successCount++;
       } catch (err) {
         errors.push({ row: rowNum, error: err.message });
         failedCount++;
@@ -168,6 +220,7 @@ exports.importExcel = async (req, res) => {
       message: '匯入完成',
       totalRows: dataRows.length,
       successRows: successCount,
+      updatedRows: updatedCount,
       failedRows: failedCount,
       errors,
     });
@@ -182,11 +235,75 @@ exports.importExcel = async (req, res) => {
 
 exports.getTemplate = async (req, res) => {
   const wb = XLSX.utils.book_new();
-  const ws = XLSX.utils.aoa_to_sheet([REQUIRED_COLS]);
-  ws['!cols'] = REQUIRED_COLS.map(() => ({ wch: 20 }));
+  const ws = XLSX.utils.aoa_to_sheet([ALL_COLS]);
+  ws['!cols'] = ALL_COLS.map(() => ({ wch: 20 }));
   XLSX.utils.book_append_sheet(wb, ws, '場景匯入範本');
   const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
   res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
   res.setHeader('Content-Disposition', 'attachment; filename="scene_import_template.xlsx"');
   res.send(buf);
+};
+
+exports.exportExcel = async (req, res) => {
+  try {
+    const scenes = await prisma.scene.findMany({
+      include: {
+        department: { include: { division: true } },
+        section: true,
+      },
+      orderBy: { itemNo: 'asc' },
+    });
+
+    const header = ALL_COLS;
+    const dataRows = scenes.map(s => [
+      s.itemNo,
+      s.department?.division?.name || '',
+      s.department?.name || '',
+      s.section?.name || '',
+      s.sceneName,
+      s.maintainOrDevelop || '',
+      s.itAssisted === true ? '是' : s.itAssisted === false ? '否' : '',
+      s.developMethod || '',
+      s.agentCategory || '',
+      s.developToolDesc || '',
+      s.inputDesc || '',
+      s.outputDesc || '',
+      s.taskSteps || '',
+      s.rawDataExample || '',
+      s.finalDataExample || '',
+      s.timePerExecution || '',
+      s.monthlyFrequency || '',
+      s.demandCount ?? '',
+      s.taskOwners || '',
+      s.seedOwners || '',
+      s.directSupervisor || '',
+      s.priority,
+      s.status,
+      s.progress,
+      s.establishDate ? s.establishDate.toISOString().substring(0, 10) : '',
+      s.targetDate ? s.targetDate.toISOString().substring(0, 10) : '',
+      s.goLiveDate ? s.goLiveDate.toISOString().substring(0, 10) : '',
+      s.originalHours ?? '',
+      s.improvedHours ?? '',
+      s.originalHeadcount ?? '',
+      s.improvedHeadcount ?? '',
+      s.resultText || '',
+      s.actualResultText || '',
+      s.otherMetrics || '',
+      s.note || '',
+    ]);
+
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([header, ...dataRows]);
+    ws['!cols'] = header.map(() => ({ wch: 20 }));
+    XLSX.utils.book_append_sheet(wb, ws, '場景資料');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+
+    const filename = `scenes_export_${new Date().toISOString().substring(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ error: '匯出失敗：' + err.message });
+  }
 };
