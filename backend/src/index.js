@@ -23,6 +23,9 @@ const efficiencyReportsRoutes  = require('./routes/efficiency-reports');
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// ── 信任反向代理（Railway / Heroku 等平台需要）──
+app.set('trust proxy', 1);
+
 // ── 安全 Headers ──────────────────────────────
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
