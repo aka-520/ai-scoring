@@ -27,8 +27,14 @@ const PORT = process.env.PORT || 3001;
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 
 // ── CORS ──────────────────────────────────────
+const allowedOrigins = (process.env.FRONTEND_URL || 'http://localhost:5174')
+  .split(',')
+  .map(o => o.trim());
 app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) return callback(null, true);
+    callback(new Error(`CORS: origin ${origin} not allowed`));
+  },
   credentials: true,
 }));
 
